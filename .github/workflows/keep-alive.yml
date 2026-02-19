@@ -1,0 +1,60 @@
+name: Random Keep Weread-Bot Active (Weekly)
+on:
+  # 每周设置多个候选时间点（比如每周1/3/5/7的不同时段），但实际是否执行由脚本随机决定
+  schedule:
+    # 候选时间1：周一 UTC 2点（北京时间10点）
+    - cron: '0 2 * * 1'
+    # 候选时间2：周三 UTC 8点（北京时间16点）
+    - cron: '0 8 * * 3'
+    # 候选时间3：周五 UTC 14点（北京时间22点）
+    - cron: '0 14 * * 5'
+    # 候选时间4：周日 UTC 20点（北京时间次日4点）
+    - cron: '0 20 * * 0'
+  # 手动触发（测试用）
+  workflow_dispatch:
+
+jobs:
+  random-keep-alive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+
+      # 核心：随机决定是否执行活跃任务（控制每周仅触发2-3次）
+      - name: Randomly decide to run
+        id: random
+        run: |
+          # 生成0-9的随机数，仅当随机数≤2时执行（概率30%，每周4个候选点≈1-2次实际执行）
+          RAND_NUM=$((RANDOM % 10))
+          echo "random_number=$RAND_NUM" >> $GITHUB_ENV
+          if [ $RAND_NUM -le 2 ]; then
+            echo "run_task=true" >> $GITHUB_ENV
+          else
+            echo "run_task=false" >> $GITHUB_ENV
+          fi
+
+      # 仅当随机命中时，执行活跃任务
+      - name: Run keep-alive task (if selected)
+        if: env.run_task == 'true'
+        run: |
+          echo "✅ 本次随机命中，执行活跃任务 - $(date)"
+          # 方式1：仅保活仓库（无敏感信息，推荐）
+          python -c "print('Weread-bot active at $(date)')"
+          # 方式2：如需实际运行短时长任务（需配置Secrets）
+          # export WEREAD_CURL_STRING='${{ secrets.WEREAD_CURL_STRING }}'
+          # export READ_DURATION_MIN=1  # 仅运行1分钟
+          # python weread_bot.py
+
+      # 可选：输出日志（方便查看是否触发）
+      - name: Log result
+        run: |
+          if [ ${{ env.run_task }} = true ]; then
+            echo "📌 本周活跃任务已执行（随机数：${{ env.random_number }}）"
+          else
+            echo "ℹ️ 本次未触发（随机数：${{ env.random_number }}），等待下次候选时间"
+          fi
